@@ -11,9 +11,6 @@ from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.model_selection import train_test_split
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
 import joblib
 import streamlit.components.v1 as components
 
@@ -74,9 +71,14 @@ def predict_time_series(events_df, target_column='event_count', days_to_predict=
     scaler = MinMaxScaler()
     scaled_data = scaler.fit_transform(daily_data[[target_column]])
     
-    # 시퀀스 생성
+    # 특성 생성
     seq_length = 7  # 7일 데이터로 다음 날 예측
-    X, y = create_sequences(scaled_data, seq_length)
+    X, y = [], []
+    for i in range(len(scaled_data) - seq_length):
+        X.append(scaled_data[i:i+seq_length].flatten())
+        y.append(scaled_data[i+seq_length])
+    X = np.array(X)
+    y = np.array(y)
     
     # 데이터 분할
     train_size = int(len(X) * 0.8)
@@ -84,16 +86,16 @@ def predict_time_series(events_df, target_column='event_count', days_to_predict=
     y_train, y_test = y[:train_size], y[train_size:]
     
     # 모델 학습
-    model = build_lstm_model(seq_length, 1)
-    model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0)
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train.ravel())
     
     # 미래 예측
-    last_sequence = scaled_data[-seq_length:]
+    last_sequence = scaled_data[-seq_length:].flatten()
     future_predictions = []
     
     for _ in range(days_to_predict):
-        next_pred = model.predict(last_sequence.reshape(1, seq_length, 1), verbose=0)
-        future_predictions.append(next_pred[0, 0])
+        next_pred = model.predict([last_sequence])[0]
+        future_predictions.append(next_pred)
         last_sequence = np.roll(last_sequence, -1)
         last_sequence[-1] = next_pred
     
